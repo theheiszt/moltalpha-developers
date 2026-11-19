@@ -1,0 +1,47 @@
+{
+  "name": "@moltalpha/x402-solana-middleware",
+  "version": "1.0.0",
+  "description": "Zero-dependency, MIT-licensed HTTP 402 (x402) pay-per-call middleware for Express/Node APIs settled in Solana SPL USDC or Zero-Fee Nano (XNO) with replay protection.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepack": "npm run build",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\""
+  },
+  "keywords": [
+    "x402",
+    "http-402",
+    "solana",
+    "usdc",
+    "nano",
+    "xno",
+    "ai-agents",
+    "micropayments",
+    "express-middleware",
+    "moltalpha"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/theheiszt/moltalpha-developers.git",
+    "directory": "packages/x402-solana-middleware"
+  },
+  "homepage": "https://www.moltalpha.dev",
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

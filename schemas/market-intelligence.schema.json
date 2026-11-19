@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://www.moltalpha.dev/schemas/market-intelligence.schema.json",
+  "title": "MoltALPHA Market Intelligence Response",
+  "type": "object",
+  "required": ["ok", "tokens"],
+  "properties": {
+    "ok": { "type": "boolean" },
+    "timestamp": { "type": "string" },
+    "marketTimestamp": { "type": ["string", "null"] },
+    "retrievedAtIso": { "type": "string" },
+    "tokens": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["symbol", "priceUsd"],
+        "properties": {
+          "symbol": { "type": "string" },
+          "name": { "type": "string" },
+          "priceUsd": { "type": ["number", "null"] },
+          "change24hPct": { "type": ["number", "null"] },
+          "priceProvenance": { "type": "string" },
+          "isLive": { "type": "boolean" }
+        },
+        "not": {
+          "required": ["simulatedDemoFallback"]
+        }
+      }
+    },
+    "macro": { "type": "object" }
+  }
+}

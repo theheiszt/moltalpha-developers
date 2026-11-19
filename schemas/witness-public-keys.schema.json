@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://www.moltalpha.dev/schemas/witness-public-keys.schema.json",
+  "title": "MoltALPHA Witness Public Keys Registry",
+  "type": "object",
+  "required": ["active_key_id", "public_keys"],
+  "properties": {
+    "active_key_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "public_keys": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["key_id", "algorithm", "status"],
+        "properties": {
+          "key_id": { "type": "string" },
+          "algorithm": { "type": "string", "const": "Ed25519" },
+          "status": { "type": "string", "enum": ["ACTIVE", "RETIRED", "REVOKED"] },
+          "public_key_spki_hex": { "type": "string" },
+          "public_key_pem": { "type": "string" },
+          "public_key_base58": { "type": "string" },
+          "created_at": { "type": "string" },
+          "expires_at": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}

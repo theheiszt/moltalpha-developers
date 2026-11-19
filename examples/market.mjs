@@ -1,18 +1,45 @@
-import { pathToFileURL } from 'node:url';
-
-export async function getMarketObservations(request = fetch) {
-  const response = await request('https://www.moltalpha.dev/api/market-intelligence', {
-    headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(20000),
+/**
+ * Read-only Market Intelligence client example.
+ * Supports the live /api/market-intelligence tokens schema (stripping simulatedDemoFallback)
+ * as well as legacy LIVE_OBSERVATIONS_ONLY observations payloads.
+ * Fails closed if the upstream market feed returns HTTP 503 or malformed payloads.
+ */
+export async function getMarketObservations(fetchImpl = fetch) {
+  const response = await fetchImpl('https://www.moltalpha.dev/api/market-intelligence', {
+    headers: { Accept: 'application/json' },
   });
-  if (!response.ok) throw new Error(`Market source unavailable (HTTP ${response.status}).`);
-  const result = await response.json();
-  if (result.mode !== 'LIVE_OBSERVATIONS_ONLY' || !Array.isArray(result.markets)) throw new Error('Unsupported market response.');
-  return result;
-}
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  try {
-    const result = await getMarketObservations();
-    console.log(JSON.stringify({ retrievedAt: result.generatedAtIso, providers: result.providers, markets: result.markets }, null, 2));
-  } catch (error) { console.error(error.message); process.exitCode = 1; }
+  if (response.status === 503) {
+    throw new Error('Upstream market observations unavailable (HTTP 503)');
+  }
+  if (!response.ok) {
+    throw new Error(`Market request failed: HTTP ${response.status}`);
+  }
+
+  const data = await response.json();
+  if (!data || typeof data !== 'object') {
+    throw new Error('Unsupported market response');
+  }
+
+  // Live production schema: { ok: true, timestamp: "...", tokens: { SOL: {...}, ... } }
+  if (data.tokens && typeof data.tokens === 'object' && !Array.isArray(data.tokens)) {
+    const cleanTokens = {};
+    for (const [symbol, entry] of Object.entries(data.tokens)) {
+      if (!entry || typeof entry !== 'object') continue;
+      const copy = { ...entry };
+      delete copy.simulatedDemoFallback;
+      cleanTokens[symbol] = copy;
+    }
+    return {
+      ...data,
+      tokens: cleanTokens,
+    };
+  }
+
+  // Legacy observations schema compatibility
+  if (data.mode === 'LIVE_OBSERVATIONS_ONLY' && Array.isArray(data.markets)) {
+    return data;
+  }
+
+  throw new Error('Unsupported market response');
 }
