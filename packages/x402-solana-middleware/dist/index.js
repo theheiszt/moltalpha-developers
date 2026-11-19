@@ -231,8 +231,8 @@ async function verifySolanaUsdcPayment(txHash, options, fetcher) {
     }
     if (typeof tx.blockTime === 'number' && Number.isFinite(tx.blockTime) && tx.blockTime > 0) {
         const ageSec = Math.floor(Date.now() / 1000) - tx.blockTime;
-        if (ageSec > maxAgeSec) {
-            return { ok: false, status: 422, code: 'TX_EXPIRED', message: `Solana transaction exceeds ${maxAgeSec}s freshness window.` };
+        if (ageSec > maxAgeSec || ageSec < -300) {
+            return { ok: false, status: 422, code: 'TX_EXPIRED', message: `Solana transaction outside ${maxAgeSec}s freshness window.` };
         }
     }
     else if (!options.allowMissingTxTimestamp) {
@@ -403,8 +403,8 @@ async function verifyNanoPayment(txHash, options, fetcher) {
     const localTs = rawTs !== undefined && rawTs !== null && String(rawTs).trim() !== '' ? Number(rawTs) : NaN;
     if (Number.isFinite(localTs) && localTs > 0) {
         const ageSec = Math.floor(Date.now() / 1000) - localTs;
-        if (ageSec > maxAgeSec) {
-            return { ok: false, status: 422, code: 'TX_EXPIRED', message: `Nano block exceeds ${maxAgeSec}s freshness window.` };
+        if (ageSec > maxAgeSec || ageSec < -300) {
+            return { ok: false, status: 422, code: 'TX_EXPIRED', message: `Nano block outside ${maxAgeSec}s freshness window.` };
         }
     }
     else if (!options.allowMissingTxTimestamp) {

@@ -49,6 +49,10 @@ def get_market_candles(
     base_url: str = DEFAULT_WWW_BASE_URL,
     **kwargs: Any,
 ) -> dict[str, Any]:
+    if not isinstance(pair, str) or not pair.strip():
+        raise ValueError("pair is required for get_market_candles")
+    if isinstance(granularity, bool) or not isinstance(granularity, int) or granularity <= 0:
+        raise ValueError("granularity must be a positive integer")
     root = str(base_url or DEFAULT_WWW_BASE_URL).rstrip("/")
     qs = urlencode({"pair": pair.strip(), "granularity": int(granularity)})
     data = request_json(f"{root}/api/market-candles?{qs}", **kwargs)

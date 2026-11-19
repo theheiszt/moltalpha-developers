@@ -50,7 +50,7 @@ export function decodeBase58(input) {
 /**
  * RFC 8785 JSON Canonicalization Scheme (JCS).
  */
-export function canonicalizeJsonRfc8785(value) {
+export function canonicalizeJsonRfc8785(value, seen = new WeakSet()) {
   if (value === undefined || typeof value === 'function' || typeof value === 'symbol') {
     throw new TypeError(`Cannot canonicalize unsupported JSON value type: ${typeof value}`);
   }
@@ -70,16 +70,36 @@ export function canonicalizeJsonRfc8785(value) {
   if (typeof value === 'string') {
     return JSON.stringify(value);
   }
-  if (Array.isArray(value)) {
-    const items = value.map((item) => canonicalizeJsonRfc8785(item === undefined ? null : item));
-    return `[${items.join(',')}]`;
-  }
   if (typeof value === 'object') {
-    const keys = Object.keys(value)
-      .filter((k) => value[k] !== undefined)
-      .sort();
-    const entries = keys.map((k) => `${JSON.stringify(k)}:${canonicalizeJsonRfc8785(value[k])}`);
-    return `{${entries.join(',')}}`;
+    if (seen.has(value)) {
+      throw new Error('RFC 8785 circular reference detected');
+    }
+    if (typeof value.toJSON === 'function') {
+      seen.add(value);
+      try {
+        return canonicalizeJsonRfc8785(value.toJSON(), seen);
+      } finally {
+        seen.delete(value);
+      }
+    }
+    seen.add(value);
+    try {
+      if (Array.isArray(value)) {
+        const items = value.map((item) =>
+          item === undefined || typeof item === 'function' || typeof item === 'symbol'
+            ? 'null'
+            : canonicalizeJsonRfc8785(item, seen)
+        );
+        return `[${items.join(',')}]`;
+      }
+      const keys = Object.keys(value)
+        .filter((k) => value[k] !== undefined && typeof value[k] !== 'function' && typeof value[k] !== 'symbol')
+        .sort();
+      const entries = keys.map((k) => `${JSON.stringify(k)}:${canonicalizeJsonRfc8785(value[k], seen)}`);
+      return `{${entries.join(',')}}`;
+    } finally {
+      seen.delete(value);
+    }
   }
   throw new TypeError(`Unsupported value in canonicalizeJsonRfc8785: ${typeof value}`);
 }
@@ -92,7 +112,10 @@ function parseSignatureBytes(signature) {
   if (typeof signature !== 'string' || signature.trim().length === 0) {
     throw new Error('Missing or empty signature string');
   }
-  const trimmed = signature.trim();
+  const trimmed = signature.trim().replace(/^ed25519:/i, '').trim();
+  if (!trimmed) {
+    throw new Error('Missing or empty signature string');
+  }
   if (/^[0-9a-fA-F]{128}$/.test(trimmed)) {
     return Buffer.from(trimmed, 'hex');
   }
@@ -230,8 +253,35 @@ export function verifyWitnessSignature(input) {
 
   const payloadSha256Hex = crypto.createHash('sha256').update(canonicalJson, 'utf8').digest('hex');
 
+  if (typeof input.expectedPayloadSha256 === 'string' && input.expectedPayloadSha256.trim().length > 0) {
+    if (input.expectedPayloadSha256.trim().toLowerCase() !== payloadSha256Hex.toLowerCase()) {
+      return {
+        ...baseResult,
+        canonicalJson,
+        payloadSha256Hex,
+        reason: 'Payload SHA-256 digest mismatch against expectedPayloadSha256',
+      };
+    }
+  }
+
   try {
     const publicKey = resolveEd25519PublicKey(input);
+    const spkiDer = publicKey.export({ format: 'der', type: 'spki' });
+    const spkiFp = crypto.createHash('sha256').update(spkiDer).digest('hex');
+    const rawFp = crypto.createHash('sha256').update(spkiDer.subarray(spkiDer.length - 32)).digest('hex');
+
+    if (typeof input.expectedKeyFingerprintSha256 === 'string' && input.expectedKeyFingerprintSha256.trim().length > 0) {
+      const expectedFp = input.expectedKeyFingerprintSha256.trim().toLowerCase();
+      if (expectedFp !== spkiFp && expectedFp !== rawFp) {
+        return {
+          ...baseResult,
+          canonicalJson,
+          payloadSha256Hex,
+          reason: 'Public key SHA-256 fingerprint mismatch against expectedKeyFingerprintSha256',
+        };
+      }
+    }
+
     const sigBytes = parseSignatureBytes(input.signature);
     const mode = input.signingInput || 'auto';
 
@@ -284,8 +334,12 @@ export async function fetchWitness(witnessId, options = {}) {
   if (typeof witnessId !== 'string' || witnessId.trim().length === 0) {
     throw new Error('witnessId must be a non-empty string');
   }
+  const trimmed = witnessId.trim();
+  if (trimmed.includes('/') || trimmed.includes('..') || trimmed.includes('?')) {
+    throw new Error('Invalid witnessId: path traversal characters are forbidden');
+  }
   const baseUrl = String(options.gatewayUrl || options.baseUrl || DEFAULT_API_GATEWAY_URL).replace(/\/+$/, '');
-  return requestJson(`${baseUrl}/v1/witnesses/${encodeURIComponent(witnessId.trim())}`, options);
+  return requestJson(`${baseUrl}/v1/witnesses/${encodeURIComponent(trimmed)}`, options);
 }
 
 export const getWitness = fetchWitness;
@@ -307,7 +361,9 @@ export async function verifyWithLiveRegistry(input = {}) {
 
   const keyEntry = registry.public_keys[targetKeyId];
   const statusUpper = String(keyEntry.status || keyEntry.revocation_status || 'ACTIVE').toUpperCase();
-  if (statusUpper === 'REVOKED' || statusUpper === 'RETIRED') {
+  const isRetired =
+    statusUpper === 'RETIRED' || Boolean(keyEntry.retired_at && String(keyEntry.retired_at).trim());
+  if (statusUpper === 'REVOKED' || (isRetired && !input.allowRetiredKeys) || (statusUpper !== 'ACTIVE' && !isRetired)) {
     return {
       valid: false,
       keyId: targetKeyId,
@@ -318,16 +374,32 @@ export async function verifyWithLiveRegistry(input = {}) {
     };
   }
 
-  if (keyEntry.expires_at) {
-    const expMs = Date.parse(keyEntry.expires_at);
-    if (!Number.isNaN(expMs) && expMs <= Date.now()) {
+  const nowMs = typeof input.nowMs === 'number' && Number.isFinite(input.nowMs) ? input.nowMs : Date.now();
+  if (keyEntry.valid_from) {
+    const fromMs = Date.parse(keyEntry.valid_from);
+    if (Number.isNaN(fromMs) || nowMs < fromMs) {
       return {
         valid: false,
         keyId: targetKeyId,
         canonicalJson: '',
         payloadSha256Hex: '',
         scopeNote: WITNESS_SCOPE_NOTE,
-        reason: `Witness key "${targetKeyId}" expired at ${keyEntry.expires_at}`,
+        reason: `Witness key "${targetKeyId}" is not yet valid (valid_from: ${keyEntry.valid_from})`,
+      };
+    }
+  }
+
+  const expiryIso = keyEntry.valid_until || keyEntry.expires_at;
+  if (expiryIso) {
+    const expMs = Date.parse(expiryIso);
+    if (Number.isNaN(expMs) || expMs <= nowMs) {
+      return {
+        valid: false,
+        keyId: targetKeyId,
+        canonicalJson: '',
+        payloadSha256Hex: '',
+        scopeNote: WITNESS_SCOPE_NOTE,
+        reason: `Witness key "${targetKeyId}" expired at ${expiryIso}`,
       };
     }
   }
@@ -338,6 +410,7 @@ export async function verifyWithLiveRegistry(input = {}) {
     publicKeySpkiHex: keyEntry.public_key_spki_hex,
     publicKeyPem: keyEntry.public_key_pem,
     publicKeyBase58: keyEntry.public_key_base58,
+    expectedKeyFingerprintSha256: input.expectedKeyFingerprintSha256 || keyEntry.fingerprint_sha256,
     algorithm: keyEntry.algorithm || 'Ed25519',
   });
 }

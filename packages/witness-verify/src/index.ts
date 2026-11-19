@@ -500,7 +500,7 @@ export async function verifyWithLiveRegistry(options: {
     };
   }
 
-  if (normalizedStatus === 'RETIRED' || keyEntry.retired_at !== null) {
+  if (normalizedStatus === 'RETIRED' || Boolean(keyEntry.retired_at && String(keyEntry.retired_at).trim())) {
     if (!options.allowRetiredKeys) {
       return {
         valid: false,

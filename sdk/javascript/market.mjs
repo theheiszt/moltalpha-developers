@@ -55,11 +55,15 @@ export const getMarkets = getMarketIntelligence;
 
 export async function getMarketCandles(options = {}) {
   const baseUrl = String(options.baseUrl || DEFAULT_WWW_BASE_URL).replace(/\/+$/, '');
-  const pair = String(options.pair || 'SOL-USD').trim();
-  const granularity = Number.isFinite(Number(options.granularity)) ? Math.trunc(Number(options.granularity)) : 3600;
+  const pair = options.pair === undefined ? 'SOL-USD' : String(options.pair || '').trim();
   if (!pair) {
     throw new Error('pair is required for getMarketCandles');
   }
+  const rawGranularity = options.granularity === undefined ? 3600 : Number(options.granularity);
+  if (!Number.isFinite(rawGranularity) || Math.trunc(rawGranularity) <= 0) {
+    throw new Error('granularity must be a positive integer for getMarketCandles');
+  }
+  const granularity = Math.trunc(rawGranularity);
   const url = `${baseUrl}/api/market-candles?pair=${encodeURIComponent(pair)}&granularity=${encodeURIComponent(granularity)}`;
   const data = await requestJson(url, options);
   if (!data || typeof data !== 'object' || !Array.isArray(data.candles)) {
