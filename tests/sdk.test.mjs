@@ -12,13 +12,24 @@ import {
   sanitizeMarketIntelligencePayload,
   SentinelClient,
   PaymentsClient,
+  MoltAlpha,
   CANONICAL_NANO_TREASURY,
   CANONICAL_SOLANA_TREASURY,
   CANONICAL_USDC_MINT,
   parsePaymentConfigJson,
   toRawUnits,
   fromRawUnits,
+  validateMerchantWallet,
+  buildSolanaPayUrl,
+  signWebhookPayload,
+  verifyWebhookSignature,
+  verifyInboundWebhookSecret,
 } from '../sdk/javascript/index.mjs';
+import { MoltAlpha as TsMoltAlpha } from '../sdk/typescript/dist/index.js';
+import { runCheckoutFlow } from '../examples/node-checkout/checkout.mjs';
+import { runWebhookSelfTest } from '../examples/webhook-server/server.mjs';
+import { runAgentPaymentDemo } from '../examples/ai-agent-payments/agent-checkout.mjs';
+import { runIntegrationHealthcheck } from '../tools/integration-healthcheck/cli.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
@@ -178,4 +189,159 @@ test('All JSON Schema files in schemas/ are valid JSON Schema objects', () => {
     assert.ok(parsed.$schema);
     assert.equal(parsed.type, 'object');
   }
+});
+
+test('Phase C — Unified MoltAlpha TypeScript/JS SDK: wallet validation, Solana Pay URI, invoice lifecycle & HMAC webhooks', async () => {
+  assert.equal(TsMoltAlpha, MoltAlpha);
+
+  const validSol = validateMerchantWallet(CANONICAL_SOLANA_TREASURY, 'solana');
+  assert.equal(validSol.valid, true);
+  const validNano = validateMerchantWallet(CANONICAL_NANO_TREASURY, 'nano');
+  assert.equal(validNano.valid, true);
+  const mintRejected = validateMerchantWallet(CANONICAL_USDC_MINT, 'solana');
+  assert.equal(mintRejected.valid, false);
+  assert.equal(mintRejected.code, 'MINT_ADDRESS_NOT_WALLET');
+
+  assert.throws(
+    () => new MoltAlpha({ merchantWallet: CANONICAL_USDC_MINT, network: 'solana' }),
+    /SPL USDC Mint contract/
+  );
+
+  const payUri = buildSolanaPayUrl({
+    recipient: CANONICAL_SOLANA_TREASURY,
+    amount: '10.00',
+    asset: 'USDC',
+    reference: '4vJ9JU1bJJE96FWSJKvHsmmFADCg4gpZQff4P3bkLKi',
+    label: 'MoltAlpha',
+    message: 'Order 123',
+  });
+  assert.ok(payUri.startsWith(`solana:${CANONICAL_SOLANA_TREASURY}?`));
+  assert.ok(payUri.includes('amount=10'));
+  assert.ok(payUri.includes(`spl-token=${CANONICAL_USDC_MINT}`));
+  assert.ok(payUri.includes('reference=4vJ9JU1bJJE96FWSJKvHsmmFADCg4gpZQff4P3bkLKi'));
+
+  const webhookSecret = 'whsec_unit_test_secret_key_0123456789';
+  const payload = JSON.stringify({ event_id: 'evt_1', invoice_id: 'inv_1', amount_raw: 1000000 });
+  const sigHeader = signWebhookPayload(payload, webhookSecret, 1795125000);
+
+  const okWebhook = verifyWebhookSignature(payload, sigHeader, webhookSecret, {
+    toleranceSeconds: 300,
+    nowSeconds: 1795125100,
+  });
+  assert.equal(okWebhook.valid, true);
+  assert.equal(okWebhook.code, 'OK');
+
+  const expiredWebhook = verifyWebhookSignature(payload, sigHeader, webhookSecret, {
+    toleranceSeconds: 300,
+    nowSeconds: 1795126000,
+  });
+  assert.equal(expiredWebhook.valid, false);
+  assert.equal(expiredWebhook.code, 'WEBHOOK_TIMESTAMP_EXPIRED');
+
+  const tamperedWebhook = verifyWebhookSignature(
+    payload.replace('1000000', '9999999'),
+    sigHeader,
+    webhookSecret,
+    { toleranceSeconds: 300, nowSeconds: 1795125100 }
+  );
+  assert.equal(tamperedWebhook.valid, false);
+  assert.equal(tamperedWebhook.code, 'WEBHOOK_SIGNATURE_MISMATCH');
+
+  assert.equal(verifyInboundWebhookSecret('sec_abc12345', 'sec_abc12345'), true);
+  assert.equal(verifyInboundWebhookSecret('sec_abc12345', 'sec_wrong123'), false);
+
+  const sampleSig =
+    '5UfDuX7WXY8Qp9LkM2nN4pQrStUvWxYz123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwx';
+  const client = new MoltAlpha({
+    apiKey: 'mk_test_key',
+    merchantWallet: CANONICAL_SOLANA_TREASURY,
+    fetchImpl: async (url, init = {}) => {
+      const u = String(url);
+      if (u.endsWith('/v1/payments/invoice') && init.method === 'POST') {
+        assert.equal(init.headers['X-Idempotency-Key'], 'idem_123');
+        return new Response(
+          JSON.stringify({
+            success: true,
+            invoice_id: 'inv_unit_001',
+            reference: '4vJ9JU1bJJE96FWSJKvHsmmFADCg4gpZQff4P3bkLKi',
+            target_tier: 'tier_starter',
+            credits: 50,
+            asset: 'USDC',
+            amount_raw: 1000000,
+            amount_formatted: '1.00 USDC',
+            treasury_wallet: CANONICAL_SOLANA_TREASURY,
+            cluster: 'mainnet-beta',
+            solana_pay_url: payUri,
+            claim_secret: 'sec_unit_test_secret_1234567890',
+            created_at: '2026-11-19T21:00:00Z',
+            expires_at: '2026-11-19T21:30:00Z',
+          }),
+          { status: 200 }
+        );
+      }
+      if (u.endsWith('/v1/payments/status/' + sampleSig)) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            status: 'redeemed',
+            tx_signature: sampleSig,
+            asset: 'USDC',
+            tier: 'tier_starter',
+            credits_granted: 50,
+            remaining_credits: 50,
+          }),
+          { status: 200 }
+        );
+      }
+      if (u.endsWith('/v1/payments/invoice/inv_unit_001/claim')) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            status: 'recovered',
+            api_key: 'mk_recovered_key',
+            key_prefix: 'mk_recovered',
+            tier: 'tier_starter',
+            credits: 50,
+            invoice_id: 'inv_unit_001',
+            message: 'Credential recovered.',
+          }),
+          { status: 200 }
+        );
+      }
+      throw new Error(`Unexpected URL: ${u}`);
+    },
+  });
+
+  const created = await client.payments.create({
+    tier: 'tier_starter',
+    currency: 'USDC',
+    network: 'solana',
+    amount: '1.00',
+    idempotencyKey: 'idem_123',
+  });
+  assert.equal(created.invoice_id, 'inv_unit_001');
+
+  const txStatus = await client.payments.getTransactionStatus(sampleSig);
+  assert.equal(txStatus.status, 'redeemed');
+
+  const claimed = await client.payments.claimCredential(
+    'inv_unit_001',
+    'sec_unit_test_secret_1234567890'
+  );
+  assert.equal(claimed.status, 'recovered');
+});
+
+test('Phase D — Working integration examples & diagnostic tools execute cleanly', async () => {
+  const checkoutRes = await runCheckoutFlow({ live: false });
+  assert.equal(checkoutRes.verification.status, 'newly_minted');
+  assert.equal(checkoutRes.finalStatus.status, 'fulfilled');
+
+  await runWebhookSelfTest();
+
+  const agentRes = await runAgentPaymentDemo();
+  assert.equal(agentRes.verified.status, 'newly_minted');
+  assert.equal(agentRes.feed.feed.length, 1);
+
+  const healthRes = await runIntegrationHealthcheck([]);
+  assert.equal(healthRes.ok, true);
 });

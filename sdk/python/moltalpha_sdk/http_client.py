@@ -51,7 +51,7 @@ def request_json(
     api_key: str | None = None,
     timeout: float = DEFAULT_TIMEOUT_SECONDS,
     retries: int = 1,
-    retry_delay: float = 0.05,
+    retry_delay: float = 0.05, opener: Any = None,
 ) -> Any:
     bounded_retries = max(0, min(int(retries), MAX_RETRIES))
     effective_timeout = float(timeout) if timeout and timeout > 0 else DEFAULT_TIMEOUT_SECONDS
@@ -81,7 +81,7 @@ def request_json(
     for attempt in range(bounded_retries + 1):
         req = urllib.request.Request(url, data=data_bytes, headers=wire_headers, method=method)
         try:
-            with urllib.request.urlopen(req, timeout=effective_timeout) as resp:
+            with (opener if opener is not None else urllib.request.urlopen)(req, timeout=effective_timeout) as resp:
                 status_code = getattr(resp, "status", 200) or 200
                 content_type = (resp.headers.get("Content-Type") or "").lower() if hasattr(resp, "headers") else ""
                 raw_text = resp.read().decode("utf-8", errors="replace")
