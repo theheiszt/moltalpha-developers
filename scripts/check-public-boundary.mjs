@@ -7,18 +7,41 @@ const allowed = new Set([
   '.github/workflows/check.yml',
   '.gitignore',
   'CHANGELOG.md',
+  'CONTRIBUTING.md',
+  'LICENSE',
   'README.md',
   'SECURITY.md',
   'docs/api-reference.md',
   'docs/authentication.md',
+  'docs/error-handling.md',
   'docs/errors.md',
   'docs/market-data.md',
+  'docs/payment-lifecycle.md',
+  'docs/payment-platform-reorientation-audit.md',
   'docs/payments.md',
   'docs/quickstart.md',
+  'docs/security-best-practices.md',
   'docs/sentinel.md',
+  'docs/settlement-verification.md',
+  'docs/webhooks.md',
   'docs/witness.md',
+  'examples/ai-agent-payments/env.template',
+  'examples/ai-agent-payments/README.md',
+  'examples/ai-agent-payments/agent-checkout.mjs',
   'examples/market.mjs',
   'examples/market.py',
+  'examples/node-checkout/env.template',
+  'examples/node-checkout/README.md',
+  'examples/node-checkout/checkout.mjs',
+  'examples/python-checkout/env.template',
+  'examples/python-checkout/README.md',
+  'examples/python-checkout/checkout.py',
+  'examples/react-checkout/env.template',
+  'examples/react-checkout/MoltAlphaCheckout.tsx',
+  'examples/react-checkout/README.md',
+  'examples/webhook-server/env.template',
+  'examples/webhook-server/README.md',
+  'examples/webhook-server/server.mjs',
   'packages/solana-agent-kit-plugin/LICENSE',
   'packages/solana-agent-kit-plugin/README.md',
   'packages/solana-agent-kit-plugin/dist/index.d.ts',
@@ -74,9 +97,21 @@ const allowed = new Set([
   'sdk/python/moltalpha_sdk/sentinel.py',
   'sdk/python/moltalpha_sdk/witness.py',
   'sdk/python/pyproject.toml',
+  'sdk/typescript/README.md',
+  'sdk/typescript/dist/index.d.ts',
+  'sdk/typescript/dist/index.js',
+  'sdk/typescript/package.json',
+  'sdk/typescript/src/index.ts',
+  'sdk/typescript/tsconfig.json',
   'tests/market.test.mjs',
   'tests/sdk.test.mjs',
   'tests/test_sdk.py',
+  'tools/integration-healthcheck/README.md',
+  'tools/integration-healthcheck/cli.mjs',
+  'tools/payment-verifier/README.md',
+  'tools/payment-verifier/cli.mjs',
+  'tools/webhook-tester/README.md',
+  'tools/webhook-tester/cli.mjs',
 ]);
 
 const patterns = [
@@ -99,14 +134,17 @@ export function checkFile(name, contents, symlink = false) {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const root = fileURLToPath(new URL('../', import.meta.url));
-  const tracked = execFileSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' })
+export function run() {
+  const files = execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8' })
     .split('\0')
     .filter(Boolean);
-  for (const name of tracked) {
-    const fullPath = resolve(root, name);
-    checkFile(name, readFileSync(fullPath, 'utf8'), lstatSync(fullPath).isSymbolicLink());
+  for (const file of files) {
+    const stat = lstatSync(file);
+    checkFile(file, readFileSync(file, 'utf8'), stat.isSymbolicLink());
   }
-  console.log(`Checked ${tracked.length} allowlisted public files; no credential-pattern matches.`);
+  console.log(`Checked ${files.length} allowlisted public files; no credential-pattern matches.`);
+}
+
+if (import.meta.url === pathToFileURL(resolve(process.argv[1] || '')).href) {
+  run();
 }

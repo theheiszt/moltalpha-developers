@@ -108,7 +108,7 @@ export async function requestJson(url, options = {}) {
     retries = 1,
     retryDelayMs = 100,
     preserveLargeIntegers = false,
-    fetchImpl = globalThis.fetch,
+    fetchImpl = options.fetch || globalThis.fetch,
   } = options;
 
   if (typeof fetchImpl !== 'function') {

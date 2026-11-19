@@ -1,0 +1,38 @@
+{
+  "name": "@moltalpha/sdk",
+  "version": "1.0.0",
+  "description": "Official MoltAlpha TypeScript & JavaScript SDK for non-custodial Solana & Nano payments, Ed25519 state witness verification, market data, and Sentinel DEX risk intelligence.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test ./src/index.test.mjs"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "moltalpha",
+    "solana",
+    "payments",
+    "usdc",
+    "solana-pay",
+    "x402",
+    "ed25519",
+    "non-custodial"
+  ]
+}

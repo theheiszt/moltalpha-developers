@@ -2,9 +2,12 @@
 Offline unit and contract tests for the MoltALPHA Public Python SDK (stdlib-only).
 """
 
+from decimal import Decimal
+import hashlib
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "sdk" / "python"))
@@ -12,20 +15,24 @@ sys.path.insert(0, str(REPO_ROOT / "sdk" / "python"))
 from moltalpha_sdk import (  # noqa: E402
     CANONICAL_NANO_TREASURY,
     CANONICAL_SOLANA_TREASURY,
+    CANONICAL_USDC_MINT,
     MarketClient,
+    MoltAlphaClient,
     SentinelClient,
     WitnessClient,
+    build_solana_pay_url,
     canonicalize_json_rfc8785,
     decimal_to_raw_units,
     fetch_witness,
     raw_units_to_decimal,
+    sign_webhook_payload,
+    validate_merchant_wallet,
+    verify_webhook_signature,
     verify_with_registry,
     verify_witness_signature,
 )
 from moltalpha_sdk._ed25519 import BASE_POINT, L, P, _scalar_mult  # noqa: E402
 from moltalpha_sdk.market import sanitize_market_intelligence  # noqa: E402
-import hashlib  # noqa: E402
-from unittest.mock import patch  # noqa: E402
 
 
 def _compress_point(pt: tuple[int, int, int, int]) -> bytes:
@@ -69,7 +76,6 @@ class TestMoltAlphaPythonSdk(unittest.TestCase):
         self.assertTrue(ok["valid"])
         self.assertFalse(ok["verification_scope"]["guarantees_on_chain_finality"])
 
-        # Tampered / mismatched signature must return valid=False
         bad = verify_witness_signature(
             payload=payload,
             signature="00" * 64,
@@ -78,7 +84,6 @@ class TestMoltAlphaPythonSdk(unittest.TestCase):
         )
         self.assertFalse(bad["valid"])
 
-        # Digest mismatch must return valid=False
         bad_digest = verify_witness_signature(
             payload=payload,
             signature=sig_hex,
@@ -87,7 +92,6 @@ class TestMoltAlphaPythonSdk(unittest.TestCase):
         )
         self.assertFalse(bad_digest["valid"])
 
-        # Fingerprint mismatch must return valid=False
         bad_fp = verify_witness_signature(
             payload=payload,
             signature=sig_hex,
@@ -96,7 +100,6 @@ class TestMoltAlphaPythonSdk(unittest.TestCase):
         )
         self.assertFalse(bad_fp["valid"])
 
-        # Unknown algorithm rejected
         bad_alg = verify_witness_signature(
             payload=payload,
             signature=sig_hex,
@@ -179,6 +182,8 @@ class TestMoltAlphaPythonSdk(unittest.TestCase):
             CANONICAL_NANO_TREASURY,
             "nano_1s5ce5k7bj74sp31m3opq8xwx44stc5dgw6w8uajyg61xjg9wiaae4uby6pu",
         )
+        with self.assertRaises(ValueError):
+            decimal_to_raw_units(0.1, "USDC")
 
     def test_sentinel_rejects_empty_pool_address(self):
         client = SentinelClient()
@@ -186,6 +191,62 @@ class TestMoltAlphaPythonSdk(unittest.TestCase):
             client.get_pool_history("")
         with self.assertRaises(ValueError):
             client.get_pool_risk("../secret")
+
+    def test_phase_c_and_d_wallet_validation_solana_pay_webhooks_and_checkout(self):
+        sol_ok = validate_merchant_wallet(CANONICAL_SOLANA_TREASURY, "solana")
+        self.assertTrue(sol_ok["valid"])
+        nano_ok = validate_merchant_wallet(CANONICAL_NANO_TREASURY, "nano")
+        self.assertTrue(nano_ok["valid"])
+        mint_rej = validate_merchant_wallet(CANONICAL_USDC_MINT, "solana")
+        self.assertFalse(mint_rej["valid"])
+        self.assertEqual(mint_rej["code"], "MINT_ADDRESS_NOT_WALLET")
+
+        with self.assertRaises(ValueError):
+            MoltAlphaClient(merchant_wallet=CANONICAL_USDC_MINT, network="solana")
+
+        uri = build_solana_pay_url(
+            recipient=CANONICAL_SOLANA_TREASURY,
+            amount=Decimal("10.00"),
+            asset="USDC",
+            reference="4vJ9JU1bJJE96FWSJKvHsmmFADCg4gpZQff4P3bkLKi",
+            label="MoltAlpha",
+        )
+        self.assertIn(f"solana:{CANONICAL_SOLANA_TREASURY}?", uri)
+        self.assertIn("amount=10", uri)
+        self.assertIn(f"spl-token={CANONICAL_USDC_MINT}", uri)
+
+        secret = "whsec_python_unit_test_secret_0123456789"
+        payload = '{"amount_raw":1000000,"event_id":"evt_py_1","invoice_id":"inv_py_1"}'
+        sig_header = sign_webhook_payload(payload, secret, timestamp_seconds=1795125000)
+
+        ok_res = verify_webhook_signature(
+            payload, sig_header, secret, tolerance_seconds=300, now_seconds=1795125100
+        )
+        self.assertTrue(ok_res["valid"])
+        self.assertEqual(ok_res["code"], "OK")
+
+        exp_res = verify_webhook_signature(
+            payload, sig_header, secret, tolerance_seconds=300, now_seconds=1795126000
+        )
+        self.assertFalse(exp_res["valid"])
+        self.assertEqual(exp_res["code"], "WEBHOOK_TIMESTAMP_EXPIRED")
+
+        bad_res = verify_webhook_signature(
+            payload.replace("1000000", "9999999"),
+            sig_header,
+            secret,
+            tolerance_seconds=300,
+            now_seconds=1795125100,
+        )
+        self.assertFalse(bad_res["valid"])
+        self.assertEqual(bad_res["code"], "WEBHOOK_SIGNATURE_MISMATCH")
+
+        sys.path.insert(0, str(REPO_ROOT / "examples" / "python-checkout"))
+        import checkout as py_checkout  # noqa: E402
+
+        res = py_checkout.run_checkout(live=False)
+        self.assertEqual(res["verification"]["status"], "newly_minted")
+        self.assertEqual(res["final_status"]["status"], "fulfilled")
 
 
 if __name__ == "__main__":
