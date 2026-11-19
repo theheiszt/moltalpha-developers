@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://www.moltalpha.dev/schemas/state-witness.schema.json",
+  "title": "MoltALPHA Cryptographic State Witness Receipt",
+  "type": "object",
+  "required": ["witness_id", "action", "signature"],
+  "properties": {
+    "witness_id": { "type": "string" },
+    "key_id": { "type": "string" },
+    "algorithm": { "type": "string", "const": "Ed25519" },
+    "canonicalization": { "type": "string", "const": "RFC8785" },
+    "action": { "type": "string" },
+    "actor": { "type": "string" },
+    "credit_delta": { "type": "integer" },
+    "post_balance": { "type": "integer" },
+    "request_id": { "type": ["string", "null"] },
+    "timestamp": { "type": "string" },
+    "payload_sha256": { "type": "string" },
+    "signature": { "type": "string" },
+    "environmental_anchor": { "type": "object" }
+  }
+}

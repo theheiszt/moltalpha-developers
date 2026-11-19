@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "moltalpha-sdk"
+version = "0.1.0"
+description = "MoltALPHA Public Python SDK (Witness, Market Intelligence, Sentinel, Multi-Rail Payments) — Zero external runtime dependencies"
+readme = "../../README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "MoltALPHA Engineering" }]
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["moltalpha_sdk*"]

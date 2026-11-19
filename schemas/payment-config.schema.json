@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://www.moltalpha.dev/schemas/payment-config.schema.json",
+  "title": "MoltALPHA Multi-Rail Payment Configuration",
+  "type": "object",
+  "required": [
+    "accepted_rails",
+    "solana_treasury_wallet",
+    "usdc_spl_mint_contract",
+    "nano_treasury_address",
+    "pricing_tiers"
+  ],
+  "properties": {
+    "success": { "type": "boolean" },
+    "accepted_rails": {
+      "type": "array",
+      "items": { "type": "string", "enum": ["solana", "nano"] }
+    },
+    "solana_treasury_wallet": {
+      "type": "string",
+      "const": "BU5zBur46YjnCaY34XGBTJ8KSAG9EExjpZA58wDo7wAx"
+    },
+    "usdc_spl_mint_contract": {
+      "type": "string",
+      "const": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+    },
+    "nano_treasury_address": {
+      "type": "string",
+      "const": "nano_1s5ce5k7bj74sp31m3opq8xwx44stc5dgw6w8uajyg61xjg9wiaae4uby6pu"
+    },
+    "pricing_tiers": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["usd", "credits", "usdc_units", "sol_lamports", "nano_raw"],
+        "properties": {
+          "display_name": { "type": "string" },
+          "usd": { "type": "number" },
+          "credits": { "type": "integer" },
+          "usdc_units": { "type": ["integer", "string"] },
+          "sol_lamports": { "type": ["integer", "string"] },
+          "nano_raw": { "type": ["integer", "string"] }
+        }
+      }
+    }
+  }
+}

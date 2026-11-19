@@ -1,0 +1,49 @@
+{
+  "name": "@moltalpha/witness-verify",
+  "version": "1.0.0",
+  "description": "Zero-dependency offline RFC 8785 (JCS) + Ed25519 cryptographic witness verifier and key-registry client for MoltALPHA Solana & Metal X intelligence receipts.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "moltalpha-verify": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepack": "npm run build",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\""
+  },
+  "keywords": [
+    "solana",
+    "ed25519",
+    "rfc8785",
+    "jcs",
+    "witness",
+    "cryptographic-receipt",
+    "ai-agents",
+    "mcp",
+    "moltalpha"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/theheiszt/moltalpha-developers.git",
+    "directory": "packages/witness-verify"
+  },
+  "homepage": "https://www.moltalpha.dev",
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
