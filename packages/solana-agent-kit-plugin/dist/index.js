@@ -1,4 +1,4 @@
-import { DEFAULT_MOLTALPHA_GATEWAY_URL, fetchWitnessKeyRegistry, verifyWithLiveRegistry, } from '@moltalpha/witness-verify';
+import { DEFAULT_MOLTALPHA_GATEWAY_URL, fetchWitnessKeyRegistry, verifyWithLiveRegistry, } from '../../witness-verify/dist/index.js';
 async function fetchGatewayJson(url, config) {
     const fetcher = config.fetchImpl || fetch;
     const headers = { Accept: 'application/json' };

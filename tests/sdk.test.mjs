@@ -26,6 +26,8 @@ import {
   verifyInboundWebhookSecret,
 } from '../sdk/javascript/index.mjs';
 import { MoltAlpha as TsMoltAlpha } from '../sdk/typescript/dist/index.js';
+import { createMoltAlphaAgentKitPlugin } from '../packages/solana-agent-kit-plugin/dist/index.js';
+import { InMemoryX402ReplayStore } from '../packages/x402-solana-middleware/dist/index.js';
 import { runCheckoutFlow } from '../examples/node-checkout/checkout.mjs';
 import { runWebhookSelfTest } from '../examples/webhook-server/server.mjs';
 import { runAgentPaymentDemo } from '../examples/ai-agent-payments/agent-checkout.mjs';
@@ -344,4 +346,11 @@ test('Phase D — Working integration examples & diagnostic tools execute cleanl
 
   const healthRes = await runIntegrationHealthcheck([]);
   assert.equal(healthRes.ok, true);
+
+  const plugin = createMoltAlphaAgentKitPlugin({ gatewayUrl: 'https://api.moltalpha.dev' });
+  assert.equal(plugin.name, 'moltalpha-witness-and-risk');
+  assert.equal(plugin.actions.length, 4);
+  const store = new InMemoryX402ReplayStore({ maxEntries: 10 });
+  assert.equal(store.claim('solana:sig1'), true);
+  assert.equal(store.claim('solana:sig1'), false);
 });
