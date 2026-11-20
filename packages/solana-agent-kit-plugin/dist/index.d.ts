@@ -1,4 +1,4 @@
-import { type VerifyWitnessSignatureResult, type WitnessKeyRegistryResponse } from '@moltalpha/witness-verify';
+import { type VerifyWitnessSignatureResult, type WitnessKeyRegistryResponse } from '../../witness-verify/dist/index.js';
 export interface MoltAlphaPluginConfig {
     gatewayUrl?: string;
     apiKey?: string;

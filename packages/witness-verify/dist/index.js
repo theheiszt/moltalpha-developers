@@ -59,6 +59,7 @@ export function canonicalizeJsonRfc8785(value, seen = new WeakSet()) {
         seen.delete(obj);
     }
 }
+export const canonicalizeJson = canonicalizeJsonRfc8785;
 export function sha256Hex(data) {
     return crypto.createHash('sha256').update(data).digest('hex');
 }

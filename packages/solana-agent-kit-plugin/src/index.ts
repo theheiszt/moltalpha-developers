@@ -4,7 +4,7 @@ import {
   verifyWithLiveRegistry,
   type VerifyWitnessSignatureResult,
   type WitnessKeyRegistryResponse,
-} from '@moltalpha/witness-verify';
+} from '../../witness-verify/dist/index.js';
 
 export interface MoltAlphaPluginConfig {
   gatewayUrl?: string;
